@@ -1,0 +1,19 @@
+# WebSocket Application Configuration
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: websocket-config
+  namespace: websocket
+data:
+  APP_NAME: websocket
+  APP_ENV: production
+  # PostgreSQL Connection Configuration (내부 Service 사용)
+  POSTGRES_HOST: "postgresql-primary.postgresql-primary.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "vibot"
+  POSTGRES_POOL_SIZE: "10"
+  # gRPC Client Configuration (AI Chatbot 서버와 통신)
+  # Spring Boot gRPC 클라이언트 설정 형식: grpc.client.<channel-name>.address=static://<host>:<port>
+  GRPC_CLIENT_ADDRESS_FULL: "static://ai-chatbot.ai-chatbot.svc.cluster.local:9090"
+

@@ -1,0 +1,229 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vibot
+  labels:
+    app: vibot
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vibot
+  template:
+    metadata:
+      labels:
+        app: vibot
+    spec:
+      imagePullSecrets:
+        - name: kcr-regcred
+      # Pod 분산 배치: 가용영역(AZ) 단위로 균등 분산 (Pod 2개가 서로 다른 AZ에 배치되도록 선호)
+      # topologySpreadConstraints를 사용하여 AZ 단위 분산
+      # maxSkew: 1로 설정하여 AZ당 최대 1개씩만 배치 (AZ-1: 1개, AZ-2: 1개)
+      # ScheduleAnyway: 조건 불만족 시에도 스케줄링 진행 (Pending 방지)
+      topologySpreadConstraints:
+        - maxSkew: 1  # 최대 편차 (1개까지 허용) - AZ당 최대 1개씩만 배치
+          topologyKey: topology.kubernetes.io/zone  # AZ 단위로 분산
+          whenUnsatisfiable: ScheduleAnyway  # 조건 불만족 시에도 스케줄링 진행 (Pending 방지)
+          labelSelector:
+            matchLabels:
+              app: vibot
+      containers:
+        - name: vibot
+          # Spring Application Container
+          image: pbl07-02.kr-central-2.kcr.dev/vibot-registry/vitamin7-be:32
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: APP_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: APP_NAME
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: APP_ENV
+            # PostgreSQL Connection Configuration
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: SPRING_DATASOURCE_URL
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: POSTGRES_HOST
+            - name: POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: POSTGRES_PORT
+            - name: POSTGRES_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: POSTGRES_DATABASE
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-db-credentials
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-db-credentials
+                  key: password
+            # Redis Configuration
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: REDIS_PORT
+            - name: SPRING_REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: SPRING_REDIS_HOST
+            - name: SPRING_REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: SPRING_REDIS_PORT
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-redis-credentials
+                  key: password
+            - name: REDIS_DB
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-redis-credentials
+                  key: database
+            - name: SPRING_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-redis-credentials
+                  key: password
+            - name: SPRING_REDIS_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-redis-credentials
+                  key: database
+            # AWS Configuration
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-aws-credentials
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-aws-credentials
+                  key: aws-secret-access-key
+            - name: AWS_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-aws-credentials
+                  key: aws-region
+            - name: AWS_S3_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-aws-credentials
+                  key: aws-s3-bucket
+            # gRPC Client Configuration (AI Chatbot 서버와 통신)
+            # Spring Boot gRPC 클라이언트 설정 형식: grpc.client.<channel-name>.address=static://<host>:<port>
+            - name: GRPC_CLIENT_ADDRESS_FULL
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: GRPC_CLIENT_ADDRESS_FULL
+            # Spring Session 쿠키 설정 (application.yml의 spring.session.cookie.* 오버라이드)
+            - name: SPRING_SESSION_COOKIE_DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: SPRING_SESSION_COOKIE_DOMAIN
+            - name: SPRING_SESSION_COOKIE_SAME_SITE
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: SPRING_SESSION_COOKIE_SAME_SITE
+            - name: SPRING_SESSION_COOKIE_SECURE
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: SPRING_SESSION_COOKIE_SECURE
+            - name: SPRING_SESSION_COOKIE_HTTP_ONLY
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: SPRING_SESSION_COOKIE_HTTP_ONLY
+            # Spring CSRF 쿠키 설정
+            - name: SPRING_CSRF_COOKIE_HTTP_ONLY
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: SPRING_CSRF_COOKIE_HTTP_ONLY
+            # KakaoWork Configuration
+            - name: WEBSOCKET_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-kakaowork-credentials
+                  key: websocket-url
+            - name: WEBSOCKET_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-kakaowork-credentials
+                  key: websocket-token
+            - name: WEBSOCKET_VSN
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-kakaowork-credentials
+                  key: websocket-vsn
+            - name: KAKAOWORK_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-kakaowork-credentials
+                  key: kakaowork-api-url
+            - name: KAKAOWORK_HOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-kakaowork-credentials
+                  key: kakaowork-hook-token
+            - name: AI_SERVER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vibot-kakaowork-credentials
+                  key: ai-server-url
+            # SMTP Configuration
+            - name: MAIL_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: MAIL_USERNAME
+            - name: MAIL_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: MAIL_PASSWORD
+            - name: MAIL_FROM_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: vibot-config
+                  key: MAIL_FROM_EMAIL
+          # 리소스 제한 (메모리 엄격 관리, CPU는 넉넉하게)
+          # Spring Boot JVM 힙 메모리 + 메타스페이스 + 오버헤드 고려
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+

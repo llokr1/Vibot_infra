@@ -1,0 +1,90 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: replication-monitor
+  namespace: postgresql-primary
+spec:
+  schedule: "*/5 * * * *"  # 5분마다 실행
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: replication-monitor
+              image: postgres:16-alpine
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  
+                  echo "=== PostgreSQL Replication Status ==="
+                  echo "Time: $(date)"
+                  echo ""
+                  
+                  # Primary DB에서 replication 상태 확인
+                  PGPASSWORD=${POSTGRES_PASSWORD} psql -h postgresql-primary.postgresql-primary.svc.cluster.local \
+                    -U ${POSTGRES_USER} -d ${POSTGRES_DB} <<EOF
+                  
+                  -- Replication 슬롯 상태
+                  SELECT 
+                    slot_name,
+                    slot_type,
+                    active,
+                    pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS lag_size,
+                    pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn) AS lag_bytes
+                  FROM pg_replication_slots;
+                  
+                  -- Replication 연결 상태
+                  SELECT 
+                    pid,
+                    usename,
+                    application_name,
+                    client_addr,
+                    state,
+                    sync_state,
+                    pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), sent_lsn)) AS sent_lag,
+                    pg_size_pretty(pg_wal_lsn_diff(sent_lsn, write_lsn)) AS write_lag,
+                    pg_size_pretty(pg_wal_lsn_diff(write_lsn, flush_lsn)) AS flush_lag,
+                    pg_size_pretty(pg_wal_lsn_diff(flush_lsn, replay_lsn)) AS replay_lag
+                  FROM pg_stat_replication;
+                  
+                  EOF
+                  
+                  echo ""
+                  echo "=== Backup DB Status ==="
+                  
+                  # Backup DB 상태 확인
+                  PGPASSWORD=${POSTGRES_PASSWORD} psql -h postgresql-backup.postgresql-backup.svc.cluster.local \
+                    -U ${POSTGRES_USER} -d ${POSTGRES_DB} <<EOF
+                  
+                  -- Standby 상태 확인
+                  SELECT 
+                    pg_is_in_recovery() AS is_standby,
+                    pg_last_wal_receive_lsn() AS last_receive_lsn,
+                    pg_last_wal_replay_lsn() AS last_replay_lsn,
+                    pg_size_pretty(pg_wal_lsn_diff(pg_last_wal_receive_lsn(), pg_last_wal_replay_lsn())) AS replay_lag
+                  FROM pg_stat_wal_receiver;
+                  
+                  EOF
+                  
+                  echo ""
+                  echo "=== Monitoring completed ==="
+              env:
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgresql-credentials
+                      key: username
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgresql-credentials
+                      key: password
+                - name: POSTGRES_DB
+                  valueFrom:
+                    configMapKeyRef:
+                      name: postgresql-config
+                      key: POSTGRES_DB
+          restartPolicy: OnFailure
+

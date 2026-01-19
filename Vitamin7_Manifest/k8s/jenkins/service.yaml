@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-service
+  # 프로젝트 변경: namespace를 devops-tools로 설정 (Jenkins 전용 네임스페이스)
+  namespace: devops-tools
+  # 프로젝트 변경: labels 추가 (서비스 선택 및 관리 용이)
+  labels:
+    app: jenkins-server
+  annotations:
+      prometheus.io/scrape: 'true'
+      prometheus.io/path:   /
+      prometheus.io/port:   '8080'
+spec:
+  selector:
+    app: jenkins-server
+  # 프로젝트 변경: type을 NodePort로 설정 (외부 접근 가능하도록)
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 8080
+      # 프로젝트 변경: nodePort를 32001로 변경 (vibot의 8080 포트와 충돌 방지)
+      # 원래 공식 문서: nodePort: 32000
+      nodePort: 32001
+      protocol: TCP
+      name: http
+    # 프로젝트 변경: JNLP 포트 추가 (Jenkins Agent 연결용)
+    - port: 50000
+      targetPort: 50000
+      protocol: TCP
+      name: jnlp

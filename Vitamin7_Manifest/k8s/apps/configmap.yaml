@@ -1,0 +1,71 @@
+# Spring Application Configuration
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vibot-config
+  namespace: vibot
+data:
+  APP_NAME: vibot
+  APP_ENV: production
+  # PostgreSQL Connection Configuration
+  POSTGRES_HOST: "postgresql-primary.postgresql-primary.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DATABASE: "vibot"
+  # Spring Application Connection URL
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql-primary.postgresql-primary.svc.cluster.local:5432/vibot"
+  # Redis Configuration
+  REDIS_HOST: "redis.vibot.svc.cluster.local"
+  REDIS_PORT: "6379"
+  SPRING_REDIS_HOST: "redis.vibot.svc.cluster.local"
+  SPRING_REDIS_PORT: "6379"
+  # gRPC Client Configuration (AI Chatbot 서버와 통신)
+  # Spring Boot gRPC 클라이언트 설정 형식: grpc.client.<channel-name>.address=static://<host>:<port>
+  GRPC_CLIENT_ADDRESS_FULL: "static://ai-chatbot.ai-chatbot.svc.cluster.local:9090"
+  # Spring Session 쿠키 설정 (application.yml의 spring.session.cookie.* 오버라이드)
+  # Spring Boot 환경 변수 매핑: SPRING_SESSION_COOKIE_* → spring.session.cookie.*
+  # 
+  # ⚠️ 중요: localhost:3000과 dev.vitamin7.org는 완전히 다른 도메인이므로 쿠키 공유 불가
+  # 
+  # 개발 환경 해결 방법:
+  # 1. 프론트엔드 프록시 사용 (권장)
+  #    - Next.js: next.config.js의 rewrites로 /api → https://dev.vitamin7.org/api 프록시
+  #    - Vite: vite.config.js의 server.proxy로 /api 프록시
+  #    - 브라우저는 localhost:3000으로 요청, 프론트엔드 서버가 백엔드로 전달
+  # 
+  # 2. Token 기반 인증 (쿠키 대신)
+  #    - JWT 토큰을 localStorage에 저장
+  #    - Authorization 헤더로 전송
+  # 
+  # 3. /etc/hosts 파일 수정
+  #    - localhost.vitamin7.org를 127.0.0.1로 매핑
+  #    - 프론트엔드를 localhost.vitamin7.org:3000으로 실행
+  # 
+  # 프로덕션 환경:
+  # - 프론트엔드를 vitamin7.org 서브도메인으로 배포 (예: app.vitamin7.org, www.vitamin7.org)
+  # - .vitamin7.org로 Domain 설정하여 서브도메인 간 쿠키 공유
+  # - 점으로 시작(.vitamin7.org): 모든 서브도메인(vitamin7.org, api.vitamin7.org, www.vitamin7.org 등)에서 쿠키 공유 가능
+  # ⚠️ 중요: 점으로 시작(.vitamin7.org)해야 모든 서브도메인에서 쿠키 공유 가능
+  # "vitamin7.org"로 설정하면 vitamin7.org에서만 사용 가능하고, api.vitamin7.org에서는 사용 불가
+  # ".vitamin7.org"로 설정하면 vitamin7.org, api.vitamin7.org, www.vitamin7.org 등 모든 서브도메인에서 공유 가능
+  SPRING_SESSION_COOKIE_DOMAIN: "vitamin7.org"
+  # Spring Session 쿠키 SameSite 설정 (Cross-site 요청 허용)
+  # NONE: Cross-site 요청에서도 쿠키 전송 (대문자로 설정)
+  # 개발 환경에서 프록시 사용 시 Lax로 변경 가능
+  SPRING_SESSION_COOKIE_SAME_SITE: "NONE"
+  # Spring Session 쿠키 Secure 설정
+  # true: HTTPS에서만 쿠키 사용 가능 (프로덕션 권장)
+  # 개발 환경에서 HTTP localhost 사용 시 false로 변경 필요
+  # SameSite=None과 함께 사용 시 Secure=true가 필수 (프로덕션)
+  SPRING_SESSION_COOKIE_SECURE: "true"
+  # Spring Session 쿠키 HttpOnly 설정 (XSS 방지)
+  SPRING_SESSION_COOKIE_HTTP_ONLY: "true"
+  # Spring Security CORS 허용 Origin 목록 (쉼표로 구분)
+  # application.yml의 spring.web.cors.allowed-origins 오버라이드
+  # Ingress의 nginx.ingress.kubernetes.io/cors-allow-origin과 일치시켜야 함
+  SPRING_WEB_CORS_ALLOWED_ORIGINS: "http://localhost:3000,https://localhost:3000,https://dev.vitamin7.org,https://vitamin7.org,https://www.vitamin7.org,https://api.vitamin7.org"
+  SPRING_CSRF_COOKIE_HTTP_ONLY: "false"
+  # SMTP Configuration
+  MAIL_USERNAME: "kea7vitamin7@gmail.com"
+  MAIL_PASSWORD: "txeftsfktloqarsf"
+  MAIL_FROM_EMAIL: "kea7vitamin7@gmail.com"

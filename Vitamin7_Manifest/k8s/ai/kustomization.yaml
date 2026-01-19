@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ai-chatbot
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  # secret.yaml은 secrets/ai/ 디렉토리에 있으므로 별도로 apply 필요
+  # kubectl apply -f k8s/secrets/ai/secret.yaml
+  - deployment.yaml
+  - service.yaml
+

@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: monitoring
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+    # Host 헤더 없이 IP로 직접 접속하는 경우
+    - http:
+        paths:
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: monitor-grafana
+                port:
+                  name: http-web
+    # 도메인으로 접속하는 경우 (api.vitamin7.org/grafana)
+    - host: api.vitamin7.org
+      http:
+        paths:
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: monitor-grafana
+                port:
+                  name: http-web

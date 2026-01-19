@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # StorageClass (클러스터 레벨 리소스, 네임스페이스 불필요)
+  - storageclass-zone-a.yaml  # PostgreSQL Primary용 (zone-a)
+  - storageclass-zone-b.yaml  # PostgreSQL Backup용 (zone-b)
+  # PostgreSQL 인스턴스
+  - primary
+  - standby
+  - pgpool
+  # 백업 및 모니터링 (Primary 네임스페이스에 배포)
+  - monitor
+  # Failover (Primary 네임스페이스에 배포)
+  - failover

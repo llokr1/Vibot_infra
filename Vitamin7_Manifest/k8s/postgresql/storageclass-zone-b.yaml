@@ -1,0 +1,18 @@
+# PostgreSQL Backup용 StorageClass (zone-b 전용)
+# 카카오 클라우드 다중 AZ 클러스터에서 kr-central-2-b에만 PVC 생성
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: csi-cinder-sc-delete-zone-b
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: cinder.csi.openstack.org
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+allowedTopologies:
+  - matchLabelExpressions:
+    - key: topology.cinder.csi.openstack.org/zone
+      values:
+      - kr-central-2-b  # backup은 zone-b에 배포
+

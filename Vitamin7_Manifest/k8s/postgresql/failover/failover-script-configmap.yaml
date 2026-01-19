@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-failover-script
+  namespace: postgresql-primary
+data:
+  failover-script.sh: |
+    #!/bin/bash
+    # PostgreSQL failover script
+    # Promote Backup DB to Primary when Primary is unhealthy
+
+    set -e
+
+    PRIMARY_NAMESPACE="postgresql-primary"
+    BACKUP_NAMESPACE="postgresql-backup"
+    PRIMARY_POD_LABEL="app=postgresql-primary"
+    BACKUP_POD_LABEL="app=postgresql-backup"
+
+    # PostgreSQL auth (from secret)
+    PGUSER="${POSTGRES_USER:-${POSTGRES_USERNAME:-postgres}}"
+    PGPASSWORD="${POSTGRES_PASSWORD}"
+    PGDATABASE="${POSTGRES_DB:-vibot}"
+
+    echo "=========================================="
+    echo "PostgreSQL Failover Script Start"
+    echo "Time: $(date)"
+    echo ""
+
+    # 1) Check Primary DB
+    echo "=== Primary DB Check ==="
+    PRIMARY_POD=$(kubectl get pods -n "${PRIMARY_NAMESPACE}" -l "${PRIMARY_POD_LABEL}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+
+    if [ -z "${PRIMARY_POD}" ]; then
+      echo "WARN: Primary pod not found"
+      PRIMARY_READY=false
+    else
+      PRIMARY_READY=$(kubectl exec -n "${PRIMARY_NAMESPACE}" "${PRIMARY_POD}" -- \
+        sh -c "pg_isready -U ${PGUSER} -d ${PGDATABASE}" 2>/dev/null && echo "true" || echo "false")
+
+      if [ "${PRIMARY_READY}" = "true" ]; then
+        echo "OK: Primary DB is healthy"
+      else
+        echo "ERROR: Primary DB is unhealthy"
+        kubectl exec -n "${PRIMARY_NAMESPACE}" "${PRIMARY_POD}" -- \
+          sh -c "pg_isready -U ${PGUSER} -d ${PGDATABASE}" 2>&1 || true
+      fi
+    fi
+
+    echo ""
+
+    # 2) Check Backup DB
+    echo "=== Backup DB Check ==="
+    BACKUP_POD=$(kubectl get pods -n "${BACKUP_NAMESPACE}" -l "${BACKUP_POD_LABEL}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+
+    if [ -z "${BACKUP_POD}" ]; then
+      echo "ERROR: Backup pod not found"
+      exit 1
+    fi
+
+    BACKUP_IS_STANDBY=$(kubectl exec -n "${BACKUP_NAMESPACE}" "${BACKUP_POD}" -- \
+      sh -c "PGPASSWORD=${PGPASSWORD} psql -U ${PGUSER} -d ${PGDATABASE} -t -c 'SELECT pg_is_in_recovery();'" 2>/dev/null | tr -d ' ' || echo "false")
+
+    BACKUP_READY=$(kubectl exec -n "${BACKUP_NAMESPACE}" "${BACKUP_POD}" -- \
+      sh -c "pg_isready -U ${PGUSER} -d ${PGDATABASE}" 2>/dev/null && echo "true" || echo "false")
+
+    if [ "${BACKUP_READY}" = "true" ]; then
+      if [ "${BACKUP_IS_STANDBY}" = "t" ]; then
+        echo "OK: Backup DB is healthy (standby)"
+      else
+        echo "WARN: Backup DB is not in standby mode"
+      fi
+    else
+      echo "ERROR: Backup DB is unhealthy"
+      exit 1
+    fi
+
+    echo ""
+
+    # 3) Failover decision
+    if [ "${PRIMARY_READY}" = "false" ] && [ "${BACKUP_READY}" = "true" ] && [ "${BACKUP_IS_STANDBY}" = "t" ]; then
+      echo "=========================================="
+      echo "Failover: promote Backup to Primary"
+      echo "=========================================="
+      echo ""
+
+      echo "Promoting Backup DB..."
+      kubectl exec -n "${BACKUP_NAMESPACE}" "${BACKUP_POD}" -- \
+        sh -c "PGPASSWORD=${PGPASSWORD} psql -U ${PGUSER} -d ${PGDATABASE} -c 'SELECT pg_promote();'" || {
+        echo "WARN: pg_promote failed, trying trigger file..."
+        kubectl exec -n "${BACKUP_NAMESPACE}" "${BACKUP_POD}" -- \
+          touch /var/lib/postgresql/data/pgdata/failover.trigger
+      }
+
+      echo "Promotion triggered."
+      echo ""
+
+      sleep 5
+      BACKUP_IS_STANDBY_AFTER=$(kubectl exec -n "${BACKUP_NAMESPACE}" "${BACKUP_POD}" -- \
+        sh -c "PGPASSWORD=${PGPASSWORD} psql -U ${PGUSER} -d ${PGDATABASE} -t -c 'SELECT pg_is_in_recovery();'" 2>/dev/null | tr -d ' ' || echo "unknown")
+
+      if [ "${BACKUP_IS_STANDBY_AFTER}" = "f" ]; then
+        echo "OK: Backup DB is now Primary"
+      else
+        echo "WARN: Promotion check failed; still in standby"
+      fi
+    elif [ "${PRIMARY_READY}" = "true" ]; then
+      echo "OK: Primary DB is healthy - no failover needed"
+    elif [ "${BACKUP_IS_STANDBY}" != "t" ]; then
+      echo "WARN: Backup DB not in standby - manual check required"
+    else
+      echo "WARN: Failover conditions not met - manual check required"
+    fi
+
+    echo ""
+    echo "=========================================="
+    echo "PostgreSQL Failover Script End"
+    echo "=========================================="
+    echo "Time: $(date)"

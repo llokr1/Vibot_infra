@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: websocket
+  namespace: websocket
+  labels:
+    app: websocket
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: websocket
+  template:
+    metadata:
+      labels:
+        app: websocket
+    spec:
+      imagePullSecrets:
+        - name: kcr-regcred
+      containers:
+        - name: websocket
+          # WebSocket Application Container
+          # TODO: 실제 이미지 경로로 변경 필요
+          # 현재 이미지가 KCR에 존재하지 않음 - 이미지 빌드 및 푸시 필요
+          image: pbl07-02.kr-central-2.kcr.dev/socket-registry/vitamin7-websocket:8
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+              name: http
+          env:
+            # Application 기본 설정
+            - name: APP_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: websocket-config
+                  key: APP_NAME
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: websocket-config
+                  key: APP_ENV
+            # PostgreSQL 설정
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: websocket-config
+                  key: POSTGRES_HOST
+            - name: POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: websocket-config
+                  key: POSTGRES_PORT
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: websocket-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: websocket-credentials
+                  key: postgres-username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: websocket-credentials
+                  key: postgres-password
+            - name: POSTGRES_POOL_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: websocket-config
+                  key: POSTGRES_POOL_SIZE
+            # gRPC Client 설정
+            - name: GRPC_CLIENT_ADDRESS_FULL
+              valueFrom:
+                configMapKeyRef:
+                  name: websocket-config
+                  key: GRPC_CLIENT_ADDRESS_FULL
+            # KakaoWork WebSocket 설정
+            - name: WEBSOCKET_URL
+              valueFrom:
+                secretKeyRef:
+                  name: websocket-credentials
+                  key: websocket-url
+            - name: WEBSOCKET_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: websocket-credentials
+                  key: websocket-token
+            - name: WEBSOCKET_VSN
+              valueFrom:
+                secretKeyRef:
+                  name: websocket-credentials
+                  key: websocket-vsn
+            # KakaoWork API 설정
+            - name: KAKAOWORK_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: websocket-credentials
+                  key: kakaowork-api-url
+            - name: KAKAOWORK_HOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: websocket-credentials
+                  key: kakaowork-hook-token
+            # AI Server URL
+            - name: AI_SERVER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: websocket-credentials
+                  key: ai-server-url
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+

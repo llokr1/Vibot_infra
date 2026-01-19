@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jenkins
+  # 프로젝트 변경: namespace를 devops-tools로 설정 (Jenkins 전용 네임스페이스)
+  namespace: devops-tools
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jenkins-server
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: jenkins-server
+    spec:
+      securityContext:
+            # Note: fsGroup may be customized for a bit of better
+            # filesystem security on the shared host
+            fsGroup: 1000
+            runAsUser: 1000
+            ### runAsGroup: 1000
+      # 프로젝트 변경: serviceAccountName을 jenkins-admin으로 설정 (앞서 생성한 ServiceAccount 사용)
+      serviceAccountName: jenkins-admin
+      containers:
+        - name: jenkins
+          image: jenkins/jenkins:lts
+          # OPTIONAL: check for new floating-tag LTS releases whenever the pod is restarted:
+          imagePullPolicy: Always
+          # 프로젝트 변경: Jenkins context path를 /jenkins로 설정 (Ingress 경로와 일치)
+          env:
+            - name: JENKINS_OPTS
+              value: "--prefix=/jenkins --httpPort=8080 --httpListenAddress=0.0.0.0"
+            # JNLP 포트를 명시적으로 설정
+            - name: JENKINS_SLAVE_AGENT_PORT
+              value: "50000"
+            # Jenkins CSRF 보호 조정을 위한 Java System Properties
+            - name: JAVA_OPTS
+              value: "-Dhudson.security.csrf.DefaultCrumbIssuer.EXCLUDE_CLIENT_IP_FROM_CRUMB=true"
+            # Jenkins가 프록시 뒤에서 올바르게 동작하도록 URL 설정
+            - name: JENKINS_URL
+              value: "http://34.44.36.148/jenkins"
+            # 프록시 뒤에서 실행 중임을 명시 (CSRF 보호 조정)
+            - name: JENKINS_PROXY_HTTP_NAME
+              value: "34.44.36.148"
+            - name: JENKINS_PROXY_HTTP_PORT
+              value: "80"
+          resources:
+            # 프로젝트 변경: 리소스 요청을 클러스터 용량에 맞게 조정 (최소 요구사항으로 감소)
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+          ports:
+            - name: httpport
+              containerPort: 8080
+            - name: jnlpport
+              containerPort: 50000
+          livenessProbe:
+            httpGet:
+              # 프로젝트 변경: 경로를 /jenkins/login으로 변경 (Jenkins context path와 일치)
+              path: "/jenkins/login"
+              port: 8080
+            initialDelaySeconds: 90
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              # 프로젝트 변경: 경로를 /jenkins/login으로 변경 (Jenkins context path와 일치)
+              path: "/jenkins/login"
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: jenkins-data
+              mountPath: /var/jenkins_home
+      volumes:
+        - name: jenkins-data
+          persistentVolumeClaim:
+              # 프로젝트 변경: claimName을 jenkins-pv-claim으로 설정 (앞서 생성한 PVC 사용)
+              claimName: jenkins-pv-claim
+

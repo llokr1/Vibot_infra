@@ -1,0 +1,184 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql-backup
+  namespace: postgresql-backup
+  labels:
+    app: postgresql-backup
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql-backup
+  template:
+    metadata:
+      labels:
+        app: postgresql-backup
+    spec:
+      # AZ 설정: backup은 zone-b에 배포
+      # GKE의 경우 nodeSelector를 사용하여 특정 zone의 노드에 스케줄링
+      nodeSelector:
+        topology.kubernetes.io/zone: "kr-central-2-b"
+      initContainers:
+        - name: init-standby
+          image: postgres:16-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Initializing PostgreSQL Standby..."
+              
+              # Primary DB가 준비될 때까지 대기
+              until pg_isready -h ${POSTGRES_MASTER_SERVICE} -U ${POSTGRES_REPLICATION_USER}; do
+                echo "Waiting for primary DB to be ready..."
+                sleep 5
+              done
+              
+              # 데이터 디렉토리가 비어있으면 base backup 수행
+              if [ ! -f "$PGDATA/PG_VERSION" ]; then
+                echo "Performing base backup from primary..."
+                PGPASSWORD=${POSTGRES_REPLICATION_PASSWORD} pg_basebackup \
+                  -h ${POSTGRES_MASTER_SERVICE} \
+                  -U ${POSTGRES_REPLICATION_USER} \
+                  -D ${PGDATA} \
+                  -P \
+                  -W \
+                  -R \
+                  -X stream \
+                  -v
+                
+                echo "Base backup completed"
+              else
+                echo "Data directory already exists, checking replication status..."
+              fi
+              
+              # postgresql.auto.conf 생성/업데이트 (환경 변수 치환)
+              echo "Creating postgresql.auto.conf with environment variable substitution..."
+              AUTO_CONF_FILE="${PGDATA}/postgresql.auto.conf"
+              
+              # postgresql.auto.conf 생성/업데이트 (항상 재생성하여 최신 설정 보장)
+              # 주의: PostgreSQL 16에서는 trigger_file 설정이 제거됨 (pg_promote() 함수 사용)
+              echo "Creating/updating postgresql.auto.conf..."
+              {
+                echo "# Standby 모드 설정 (환경 변수 치환됨)"
+                echo "primary_conninfo = 'host=${POSTGRES_MASTER_SERVICE} port=5432 user=${POSTGRES_REPLICATION_USER} password=${POSTGRES_REPLICATION_PASSWORD}'"
+                echo "primary_slot_name = 'backup_slot'"
+                echo "# Hot Standby 설정"
+                echo "hot_standby = on"
+                echo "hot_standby_feedback = on"
+              } > "${AUTO_CONF_FILE}"
+              
+              # PostgreSQL 16에서는 trigger_file 설정이 제거됨
+              # Failover 시에는 pg_promote() 함수를 사용하거나 promote.trigger 파일 생성
+              # 기존 postgresql.conf에서 trigger_file 설정 제거
+              if [ -f "${PGDATA}/postgresql.conf" ]; then
+                sed -i '/^trigger_file/d' "${PGDATA}/postgresql.conf" || true
+                sed -i '/^#.*trigger_file/d' "${PGDATA}/postgresql.conf" || true
+              fi
+              
+              echo "postgresql.auto.conf contents:"
+              cat "${AUTO_CONF_FILE}"
+              
+              echo "postgresql.auto.conf created/updated successfully"
+              echo "Standby initialization completed"
+          env:
+            - name: POSTGRES_MASTER_SERVICE
+              value: "postgresql-primary.postgresql-primary.svc.cluster.local"
+            - name: POSTGRES_REPLICATION_USER
+              value: "replicator"
+            - name: POSTGRES_REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-credentials
+                  key: replication-password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: postgresql-storage
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgresql
+          # PostgreSQL 16 공식 이미지
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          env:
+            # PostgreSQL 데이터베이스 이름
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: postgresql-config
+                  key: POSTGRES_DB
+            # PostgreSQL 사용자명
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-credentials
+                  key: username
+            # PostgreSQL 비밀번호
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-credentials
+                  key: password
+            # PostgreSQL 데이터 디렉토리
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            # Replication 설정 (replicator 사용자 사용)
+            # 주의: postgresql-credentials Secret에 'replication-password' 키가 반드시 있어야 합니다.
+            # Secret 생성 예시:
+            # kubectl create secret generic postgresql-credentials \
+            #   --from-literal=username=postgres \
+            #   --from-literal=password=your-password \
+            #   --from-literal=replication-password=your-replication-password \
+            #   -n postgresql-backup
+            - name: POSTGRES_MASTER_SERVICE
+              value: "postgresql-primary.postgresql-primary.svc.cluster.local"
+            - name: POSTGRES_REPLICATION_USER
+              value: "replicator"
+            - name: POSTGRES_REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-credentials
+                  key: replication-password
+          volumeMounts:
+            - name: postgresql-storage
+              mountPath: /var/lib/postgresql/data
+          # 리소스 제한 (백업 DB는 더 낮은 리소스, 메모리 엄격 관리)
+          # PostgreSQL 최소 메모리 요구사항 고려
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"  # PostgreSQL 최소 안전 메모리 (192Mi는 부족)
+              cpu: "2000m"     # CPU는 넉넉하게
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: postgresql-storage
+          persistentVolumeClaim:
+            claimName: postgresql-pvc
+

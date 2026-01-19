@@ -1,0 +1,105 @@
+# Alertmanager 비활성화 (알림 기능 미사용)
+alertmanager:
+  enabled: false
+
+# Prometheus Alertmanager 연동 비활성화
+prometheus:
+  prometheusSpec:
+    externalUrl: "https://prometheus.vitamin7.org"
+    routePrefix: "/"
+    # Alertmanager 연동 비활성화
+    alertmanagers: []
+    # Alerting rules 비활성화
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector: {}
+    ruleNamespaceSelector: {}
+    # Recording rules 비활성화
+    additionalScrapeConfigs: []
+    # 알림 관련 설정 제거
+    alerting:
+      alertmanagers: []
+    # 리소스 제한 (메모리 엄격 관리, CPU는 넉넉하게)
+    # Prometheus는 메트릭 저장을 위해 메모리 필요
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "100m"
+      limits:
+        memory: "1Gi"     # Prometheus 안전 메모리 (메트릭 저장 고려)
+        cpu: "2000m"      # CPU는 넉넉하게
+
+prometheus-node-exporter:
+  hostRootFsMount:
+    enabled: false
+  nodeSelector: {}
+  # 리소스 제한 (DaemonSet, 메모리 엄격 관리)
+  resources:
+    requests:
+      memory: "32Mi"
+      cpu: "25m"
+    limits:
+      memory: "48Mi"     # 엄격한 메모리 제한
+      cpu: "2000m"       # CPU는 넉넉하게
+
+# kube-state-metrics 리소스 제한 (메모리 엄격 관리)
+kubeStateMetrics:
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "25m"
+    limits:
+      memory: "96Mi"     # 엄격한 메모리 제한
+      cpu: "2000m"       # CPU는 넉넉하게
+
+# Admission Webhooks 이미지 설정 (KCR 사용)
+admissionWebhooks:
+  enabled: true
+  patch:
+    image:
+      repository: pbl07-02.kr-central-2.kcr.dev/kube-webhook-certgen/kube-webhook-certgen
+      tag: v1.6.4
+      pullPolicy: IfNotPresent
+    imagePullSecrets:
+      - name: kcr-regcred
+  create:
+    image:
+      repository: pbl07-02.kr-central-2.kcr.dev/kube-webhook-certgen/kube-webhook-certgen
+      tag: v1.6.4
+      pullPolicy: IfNotPresent
+    imagePullSecrets:
+      - name: kcr-regcred
+
+# Grafana 설정 (서브도메인 기반 라우팅)
+grafana:
+  grafana.ini:
+    server:
+      root_url: "https://grafana.vitamin7.org"
+      domain: "grafana.vitamin7.org"
+      enforce_domain: false
+  # Loki 데이터 소스 자동 추가
+  # SimpleScalable 모드에서는 loki-gateway 서비스를 통해 접근
+  # Multi-tenancy 헤더 필요 (authEnabled: false여도 gateway가 요구함)
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Loki
+          type: loki
+          access: proxy
+          url: http://loki-gateway.monitoring.svc.cluster.local
+          isDefault: false
+          version: 1
+          editable: true
+          jsonData:
+            httpHeaderName1: "X-Scope-OrgID"
+          secureJsonData:
+            httpHeaderValue1: "default"
+  # 리소스 제한 (메모리 엄격 관리, CPU는 넉넉하게)
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "192Mi"    # 엄격한 메모리 제한
+      cpu: "2000m"       # CPU는 넉넉하게
+

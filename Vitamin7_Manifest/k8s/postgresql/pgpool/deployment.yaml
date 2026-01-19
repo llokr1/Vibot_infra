@@ -1,0 +1,210 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgpool
+  namespace: postgresql-pgpool
+  labels:
+    app: pgpool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pgpool
+  template:
+    metadata:
+      labels:
+        app: pgpool
+    spec:
+      containers:
+      - name: pgpool
+        image: pgpool/pgpool:latest
+        ports:
+        - name: pgpool
+          containerPort: 5432
+          protocol: TCP
+        - name: pcp
+          containerPort: 9898
+          protocol: TCP
+        env:
+        # PostgreSQL 연결 자격 증명
+        - name: PGPOOL_PARAMS_POSTGRES_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: pgpool-credentials
+              key: postgres_username
+        - name: PGPOOL_PARAMS_POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pgpool-credentials
+              key: postgres_password
+        # pool_passwd 파일 생성을 위한 환경 변수 (start.sh가 자동으로 처리)
+        - name: POSTGRES_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: pgpool-credentials
+              key: postgres_username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pgpool-credentials
+              key: postgres_password
+        # pool_passwd 암호화 방법 설정 (scram-sha-256: AES 암호화, md5: MD5 해시)
+        - name: PGPOOL_PASSWORD_ENCRYPTION_METHOD
+          value: "scram-sha-256"
+        # pool_passwd 자동 생성 활성화 (기본값: true)
+        - name: PGPOOL_ENABLE_POOL_PASSWD
+          value: "true"
+        # Backend 0 (Primary)
+        - name: PGPOOL_PARAMS_BACKEND_HOSTNAME0
+          value: "postgresql-primary.postgresql-primary.svc.cluster.local"
+        - name: PGPOOL_PARAMS_BACKEND_PORT0
+          value: "5432"
+        - name: PGPOOL_PARAMS_BACKEND_WEIGHT0
+          value: "1"
+        - name: PGPOOL_PARAMS_BACKEND_FLAG0
+          value: "ALLOW_TO_FAILOVER"
+        - name: PGPOOL_PARAMS_BACKEND_DATA_DIRECTORY0
+          value: "/var/lib/postgresql/data"
+        # Backend 1 (Backup/Standby)
+        - name: PGPOOL_PARAMS_BACKEND_HOSTNAME1
+          value: "postgresql-backup.postgresql-backup.svc.cluster.local"
+        - name: PGPOOL_PARAMS_BACKEND_PORT1
+          value: "5432"
+        - name: PGPOOL_PARAMS_BACKEND_WEIGHT1
+          value: "1"
+        - name: PGPOOL_PARAMS_BACKEND_FLAG1
+          value: "ALLOW_TO_FAILOVER"
+        - name: PGPOOL_PARAMS_BACKEND_DATA_DIRECTORY1
+          value: "/var/lib/postgresql/data"
+        # Port 설정
+        - name: PGPOOL_PARAMS_PORT
+          value: "5432"
+        # Load Balancing
+        - name: PGPOOL_PARAMS_LOAD_BALANCE_MODE
+          value: "on"
+        # Streaming Replication
+        - name: PGPOOL_PARAMS_MASTER_SLAVE_MODE
+          value: "on"
+        - name: PGPOOL_PARAMS_MASTER_SLAVE_SUB_MODE
+          value: "stream"
+        # Health Check
+        - name: PGPOOL_PARAMS_HEALTH_CHECK_PERIOD
+          value: "10"
+        - name: PGPOOL_PARAMS_HEALTH_CHECK_TIMEOUT
+          value: "20"
+        - name: PGPOOL_PARAMS_HEALTH_CHECK_USER
+          valueFrom:
+            secretKeyRef:
+              name: pgpool-credentials
+              key: postgres_username
+        - name: PGPOOL_PARAMS_HEALTH_CHECK_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pgpool-healthcheck
+              key: health_check_password
+        - name: PGPOOL_SR_CHECK_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pgpool-healthcheck
+              key: sr_check_password
+        - name: PGPOOL_PARAMS_HEALTH_CHECK_DATABASE
+          value: "vibot"
+        - name: PGPOOL_PARAMS_HEALTH_CHECK_MAX_RETRIES
+          value: "3"
+        - name: PGPOOL_PARAMS_HEALTH_CHECK_RETRY_DELAY
+          value: "1"
+        # Failover
+        - name: PGPOOL_PARAMS_FAILOVER_ON_BACKEND_ERROR
+          value: "on"
+        - name: PGPOOL_PARAMS_FAILBACK
+          value: "on"
+        # Authentication (start.sh가 환경 변수로 설정을 덮어쓸 수 있음)
+        - name: PGPOOL_PARAMS_ENABLE_POOL_HBA
+          value: "off"
+        # Connection Pooling
+        - name: PGPOOL_PARAMS_NUM_INIT_CHILDREN
+          value: "32"
+        - name: PGPOOL_PARAMS_MAX_POOL
+          value: "4"
+        # Logging
+        - name: PGPOOL_PARAMS_LOG_CONNECTIONS
+          value: "on"
+        - name: PGPOOL_PARAMS_LOG_HOSTNAME
+          value: "on"
+        - name: PGPOOL_PARAMS_LOG_STATEMENT
+          value: "on"
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # ConfigMap의 설정 파일을 올바른 위치로 복사
+          cp /config/pgpool.conf /opt/pgpool-II/etc/pgpool.conf
+          cp /config/pool_hba.conf /opt/pgpool-II/etc/pool_hba.conf
+          # Inject sensitive values from secrets into pgpool.conf
+          sed -i "s/__PGPOOL_HEALTH_CHECK_PASSWORD__/${PGPOOL_PARAMS_HEALTH_CHECK_PASSWORD}/g" /opt/pgpool-II/etc/pgpool.conf
+          sed -i "s/__PGPOOL_SR_CHECK_PASSWORD__/${PGPOOL_SR_CHECK_PASSWORD}/g" /opt/pgpool-II/etc/pgpool.conf
+          # /opt/pgpool-II/bin/으로 복사 (권한 문제 해결)
+          cp /config/failover.sh /opt/pgpool-II/bin/failover.sh
+          cp /config/follow_master.sh /opt/pgpool-II/bin/follow_master.sh
+          chmod +x /opt/pgpool-II/bin/failover.sh
+          chmod +x /opt/pgpool-II/bin/follow_master.sh
+          
+          # entrypoint.sh를 호출하여 pool_passwd 생성 (환경 변수 전달)
+          # entrypoint.sh가 POSTGRES_USERNAME, POSTGRES_PASSWORD를 읽어서 pool_passwd 생성
+          # 환경 변수가 이미 설정되어 있으므로 export 불필요하지만, 명시적으로 확인
+          if [ -z "${POSTGRES_USERNAME}" ] || [ -z "${POSTGRES_PASSWORD}" ]; then
+            echo "ERROR: POSTGRES_USERNAME or POSTGRES_PASSWORD is not set"
+            exit 1
+          fi
+          echo "DEBUG: POSTGRES_USERNAME=${POSTGRES_USERNAME}"
+          echo "DEBUG: POSTGRES_PASSWORD is set (length: ${#POSTGRES_PASSWORD})"
+          /opt/pgpool-II/bin/entrypoint.sh || true
+          
+          # Pgpool-II 시작 (키 파일 경로 명시)
+          # pgpool의 기본 키 파일 경로는 /var/lib/pgsql/.pgpoolkey이지만,
+          # entrypoint.sh가 /opt/pgpool-II/etc/.pgpoolkey에 생성하므로 경로 지정 필요
+          exec /opt/pgpool-II/bin/pgpool -n -f /opt/pgpool-II/etc/pgpool.conf -k /opt/pgpool-II/etc/.pgpoolkey
+        volumeMounts:
+        - name: pgpool-config
+          mountPath: /config
+        - name: pgpool-logs
+          mountPath: /var/log/pgpool
+        - name: pgpool-run
+          mountPath: /var/run/pgpool
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "PGPASSWORD=${PGPOOL_PARAMS_POSTGRES_PASSWORD} psql -h localhost -p 5432 -U ${PGPOOL_PARAMS_POSTGRES_USERNAME} -d vibot -c 'SELECT 1' || exit 1"
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "PGPASSWORD=${PGPOOL_PARAMS_POSTGRES_PASSWORD} psql -h localhost -p 5432 -U ${PGPOOL_PARAMS_POSTGRES_USERNAME} -d vibot -c 'SELECT 1' || exit 1"
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: pgpool-config
+        configMap:
+          name: pgpool-config
+          defaultMode: 0755
+      - name: pgpool-logs
+        emptyDir: {}
+      - name: pgpool-run
+        emptyDir: {}
+

@@ -1,0 +1,159 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgpool-config
+  namespace: postgresql-pgpool
+data:
+  # Pgpool-II 메인 설정 파일
+  pgpool.conf: |
+    # ====================================
+    # Pgpool-II Configuration
+    # 카카오클라우드 Object Storage 문서 참조
+    # ====================================
+    
+    # Listen Address
+    listen_addresses = '*'
+    port = 5432
+    socket_dir = '/var/run/pgpool'
+    
+    # Backend Connection Settings
+    # Primary DB (Write/Read)
+    backend_hostname0 = 'postgresql-primary.postgresql-primary.svc.cluster.local'
+    backend_port0 = 5432
+    backend_weight0 = 1
+    backend_data_directory0 = '/var/lib/postgresql/data'
+    backend_flag0 = 'ALLOW_TO_FAILOVER'
+    
+    # Backup DB (Read Only - Standby)
+    backend_hostname1 = 'postgresql-backup.postgresql-backup.svc.cluster.local'
+    backend_port1 = 5432
+    backend_weight1 = 1
+    backend_data_directory1 = '/var/lib/postgresql/data'
+    backend_flag1 = 'ALLOW_TO_FAILOVER'
+    
+    # Connection Pooling
+    num_init_children = 32
+    max_pool = 4
+    child_life_time = 300
+    child_max_connections = 0
+    connection_life_time = 0
+    client_idle_limit = 0
+    
+    # Load Balancing
+    load_balance_mode = on
+    ignore_leading_white_space = on
+    
+    # Streaming Replication
+    replication_mode = off
+    master_slave_mode = on
+    master_slave_sub_mode = 'stream'
+    
+    # Failover
+    failover_on_backend_error = on
+    failback = on
+    failover_command = '/opt/pgpool-II/bin/failover.sh %h %p %D %m %H %M %P %r %R'
+    follow_master_command = '/opt/pgpool-II/bin/follow_master.sh %h %p %D %m %H %M %P %r %R'
+    
+    # Health Check
+    health_check_period = 10
+    health_check_timeout = 20
+    health_check_user = 'postgres'
+    health_check_password = '__PGPOOL_HEALTH_CHECK_PASSWORD__'
+    health_check_database = 'vibot'
+    health_check_max_retries = 3
+    health_check_retry_delay = 1
+    
+    # Streaming Replication Check (entrypoint.sh가 요구)
+    sr_check_user = 'postgres'
+    sr_check_password = '__PGPOOL_SR_CHECK_PASSWORD__'
+    sr_check_database = 'vibot'
+    
+    # Logging
+    log_destination = 'stderr'
+    logging_collector = on
+    log_directory = '/var/log/pgpool'
+    log_filename = 'pgpool-%Y-%m-%d.log'
+    log_connections = on
+    log_hostname = on
+    log_statement = on
+    log_per_node_statement = on
+    log_standby_delay = 'if_over_threshold'
+    
+    # Query Cache (선택사항)
+    memory_cache_enabled = off
+    
+    # SSL (필요시 활성화)
+    ssl = off
+    
+    # Authentication
+    enable_pool_hba = on
+    
+    # Watchdog (고가용성을 위한 Pgpool-II 클러스터링)
+    use_watchdog = off
+    
+    # Other Settings
+    pid_file_name = '/var/run/pgpool/pgpool.pid'
+    logdir = '/var/log/pgpool'
+    
+  # Pgpool-II Authentication 설정
+  pool_hba.conf: |
+    # TYPE  DATABASE    USER        CIDR-ADDRESS          METHOD
+    local   all         all                               trust
+    host    all         all         127.0.0.1/32          trust
+    host    all         all         ::1/128               trust
+    # 모든 연결 허용 (프로덕션에서는 제한 필요)
+    host    all         all         0.0.0.0/0             md5
+    
+  # Failover 스크립트
+  failover.sh: |
+    #!/bin/bash
+    # Pgpool-II Failover 스크립트
+    # %h = failed node hostname
+    # %p = failed node port
+    # %D = failed node database cluster path
+    # %m = new master node hostname
+    # %H = new master node port
+    # %M = old master node hostname
+    # %P = old master node port
+    # %r = new master node database cluster path
+    # %R = new master node database cluster path
+    
+    FAILED_NODE=$1
+    FAILED_PORT=$2
+    FAILED_DATADIR=$3
+    NEW_MASTER=$4
+    NEW_PORT=$5
+    OLD_MASTER=$6
+    OLD_PORT=$7
+    NEW_DATADIR=$8
+    NEW_MASTER_DATADIR=$9
+    
+    echo "=========================================="
+    echo "Pgpool-II Failover 발생"
+    echo "=========================================="
+    echo "실패한 노드: ${FAILED_NODE}:${FAILED_PORT}"
+    echo "새로운 마스터: ${NEW_MASTER}:${NEW_PORT}"
+    echo "시간: $(date)"
+    echo "=========================================="
+    
+    # 여기에 추가적인 failover 로직을 구현할 수 있습니다
+    # 예: 알림 전송, 로그 기록 등
+    
+  # Follow Master 스크립트
+  follow_master.sh: |
+    #!/bin/bash
+    # Pgpool-II Follow Master 스크립트
+    # Standby가 새로운 Master를 따라가도록 설정
+    
+    NEW_MASTER=$4
+    NEW_PORT=$5
+    
+    echo "=========================================="
+    echo "Pgpool-II Follow Master"
+    echo "=========================================="
+    echo "새로운 마스터: ${NEW_MASTER}:${NEW_PORT}"
+    echo "시간: $(date)"
+    echo "=========================================="
+    
+    # 여기에 추가적인 follow master 로직을 구현할 수 있습니다
+

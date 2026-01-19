@@ -1,0 +1,128 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgresql-failover
+  namespace: postgresql-primary
+  labels:
+    app: postgresql
+    component: failover
+spec:
+  # 1분마다 실행 (빠른 장애 감지)
+  schedule: "*/1 * * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: postgresql
+            component: failover
+        spec:
+          serviceAccountName: postgresql-failover
+          containers:
+          - name: failover
+            image: bitnami/kubectl:latest
+            command:
+            - /bin/bash
+            - /scripts/failover-script.sh
+            env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-credentials
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-credentials
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: postgresql-config
+                  key: POSTGRES_DB
+            volumeMounts:
+            - name: failover-script
+              mountPath: /scripts
+              readOnly: true
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "256Mi"
+                cpu: "200m"
+          volumes:
+          - name: failover-script
+            configMap:
+              name: postgresql-failover-script
+              defaultMode: 0755
+          restartPolicy: OnFailure
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: postgresql-failover
+  namespace: postgresql-primary
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: postgresql-failover
+  namespace: postgresql-primary
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "exec"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: postgresql-failover-backup
+  namespace: postgresql-backup
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "exec"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: postgresql-failover
+  namespace: postgresql-primary
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: postgresql-failover
+subjects:
+- kind: ServiceAccount
+  name: postgresql-failover
+  namespace: postgresql-primary
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: postgresql-failover-backup
+  namespace: postgresql-backup
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: postgresql-failover-backup
+subjects:
+- kind: ServiceAccount
+  name: postgresql-failover
+  namespace: postgresql-primary
+
+

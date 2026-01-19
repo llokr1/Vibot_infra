@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: websocket
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  # Ingress는 불필요: 모든 통신이 아웃바운드 (Pod → 카카오워크 WebSocket/API)
+  # secret.yaml은 secrets/websocket/ 디렉토리에 있으므로 별도로 apply 필요
+  # kubectl apply -f k8s/secrets/websocket/secret.yaml
+

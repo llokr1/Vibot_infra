@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-pvc
+  namespace: postgresql-backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # 기존 PVC와 동일한 StorageClass 사용 (csi-cinder-sc-delete)
+  # 주의: PVC spec은 immutable하므로 기존 PVC와 동일해야 함
+  storageClassName: csi-cinder-sc-delete
+  # AZ 설정: backup은 zone-b (kr-central-2-b)에 배포
+  # StorageClass에 allowedTopologies로 zone-b 지정됨 (storageclass-zone-b.yaml 참고)
+

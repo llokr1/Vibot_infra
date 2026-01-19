@@ -1,0 +1,85 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: jenkins-cd
+spec:
+  serviceAccountName: jenkins-admin
+  containers:
+  - name: git
+    image: alpine/git:latest
+    command: ['cat']
+    tty: true
+  - name: toolbox
+    image: lachlanevenson/k8s-kubectl:v1.22.16
+    command: ['sleep', 'infinity']
+    tty: true
+'''
+        }
+    }
+
+    environment {
+        MANIFEST_REPO   = "https://github.com/dktechin-pbl/VITAMIN-7-INFRA.git"
+        MANIFEST_BRANCH = "main"
+        KUSTOMIZE_DIR   = "Vitamin7_Manifest/k8s"
+    }
+
+    stages {
+        stage('Checkout Manifest Repo') {
+            steps {
+                container('git') {
+                    withCredentials([usernamePassword(credentialsId: 'manifest-repo-credentials', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
+                        sh '''
+                            set -e
+                            if [ ! -d "manifest-repo" ]; then
+                                git clone -b ${MANIFEST_BRANCH} https://${GIT_USERNAME}:${GIT_PASSWORD}@${MANIFEST_REPO#https://} manifest-repo
+                            else
+                                cd manifest-repo
+                                git pull origin ${MANIFEST_BRANCH}
+                                cd ..
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                container('toolbox') {
+                    sh """
+                        cd manifest-repo/${KUSTOMIZE_DIR}
+                        # AI chatbot 애플리케이션 배포
+                        kubectl apply -k ai
+                    """
+                }
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                container('toolbox') {
+                    sh '''
+                        # AI chatbot 배포 확인
+                        kubectl rollout status deployment/ai-chatbot -n ai-chatbot --timeout=180s
+                        kubectl get pods -n ai-chatbot
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "CD 파이프라인 성공"
+        }
+        failure {
+            echo "CD 파이프라인 실패 - 상세 로그 확인"
+        }
+    }
+}
+

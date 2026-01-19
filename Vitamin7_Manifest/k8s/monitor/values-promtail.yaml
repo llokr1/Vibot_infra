@@ -1,0 +1,82 @@
+# Grafana Promtail Helm Chart Values
+# 사용법: helm upgrade --install promtail grafana/promtail --namespace monitoring --create-namespace -f values-promtail.yaml
+
+# Promtail 설정
+config:
+  clients:
+    # SimpleScalable 모드에서는 gateway를 통해 접근
+    - url: http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push
+      # Multi-tenancy 비활성화 시에도 기본 tenant ID 필요 (gateway 요구사항)
+      tenant_id: "default"
+  
+  # Kubernetes Pod 로그 수집 설정
+  scrapeConfigs:
+    - job_name: kubernetes-pods
+      kubernetes_sd_configs:
+        - role: pod
+      relabel_configs:
+        - source_labels:
+            - __meta_kubernetes_pod_node_name
+          target_label: __host__
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(.+)
+        - action: replace
+          replacement: $1
+          separator: /
+          source_labels:
+            - __meta_kubernetes_namespace
+            - __meta_kubernetes_pod_name
+          target_label: job
+        - action: replace
+          source_labels:
+            - __meta_kubernetes_namespace
+          target_label: namespace
+        - action: replace
+          source_labels:
+            - __meta_kubernetes_pod_name
+          target_label: pod
+        - action: replace
+          source_labels:
+            - __meta_kubernetes_pod_container_name
+          target_label: container
+        - replacement: /var/log/pods/*$1/*.log
+          separator: /
+          source_labels:
+            - __meta_kubernetes_pod_uid
+            - __meta_kubernetes_pod_container_name
+          target_label: __path__
+
+# 리소스 제한 (메모리 엄격 관리, CPU는 넉넉하게)
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 2000m      # CPU는 넉넉하게
+    memory: 192Mi   # 엄격한 메모리 제한
+
+# RBAC 설정 (Kubernetes API 접근 권한)
+# Promtail이 Pod 정보를 수집하기 위해 필요한 권한
+# Helm Chart가 기본적으로 생성하지만 명시적으로 활성화
+rbac:
+  create: true
+
+# ServiceAccount 설정
+serviceAccount:
+  create: true
+  name: promtail
+
+# DaemonSet 설정 (각 노드에 하나씩 배포)
+# 기본값이 DaemonSet이므로 명시적으로 확인
+daemonset:
+  enabled: true
+
+# 공식 이미지 사용 (grafana/promtail)
+# KCR 미러링이 필요한 경우 아래 주석 해제 및 수정
+# image:
+#   registry: pbl07-02.kr-central-2.kcr.dev
+#   repository: promtail-registry/promtail
+#   tag: latest
+# imagePullSecrets:
+#   - name: kcr-regcred
+

@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: websocket
+  namespace: websocket
+  labels:
+    app: websocket
+spec:
+  selector:
+    app: websocket
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  type: ClusterIP
+  # 주의: 이 Service는 외부 접근용이 아닌 내부 health check용
+  # 모든 통신은 아웃바운드 (Pod → 카카오워크 WebSocket/API)
+

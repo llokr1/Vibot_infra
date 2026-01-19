@@ -1,0 +1,547 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-chatbot
+  namespace: ai-chatbot
+  labels:
+    app: ai-chatbot
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-chatbot
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1  # 롤아웃 중 추가로 생성할 수 있는 Pod 수
+      maxUnavailable: 1  # 롤아웃 중 사용 불가능할 수 있는 Pod 수
+  template:
+    metadata:
+      labels:
+        app: ai-chatbot
+    spec:
+      imagePullSecrets:
+        - name: kcr-regcred
+      # PodAntiAffinity: 가용영역(AZ)당 하나씩만 Pod 배치 (고가용성)
+      # requiredDuringSchedulingIgnoredDuringExecution: 반드시 다른 AZ에 배치
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - ai-chatbot
+              topologyKey: topology.kubernetes.io/zone  # 다른 AZ에 반드시 배치 (AZ당 하나씩)
+      containers:
+        - name: fastapi
+          # AI-CHATBOT 이미지 (실제 이미지 경로로 변경 필요)
+          image: pbl07-02.kr-central-2.kcr.dev/vibot-ai-registry/vitamin7-ai-chatbot:21
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: APP_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: APP_NAME
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: APP_ENV
+            - name: APP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: APP_PORT
+            # Redis Configuration
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: REDIS_URL
+            # PostgreSQL Configuration
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: DB_NAME
+            - name: POSTGRES_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: POSTGRES_SERVER
+            - name: POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: POSTGRES_PORT
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: POSTGRES_DB
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: DB_PASSWORD
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: POSTGRES_PASSWORD
+            # AWS Configuration
+            - name: AWS_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: AWS_REGION
+            - name: S3_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: S3_BUCKET
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: AWS_SECRET_ACCESS_KEY
+            # Bedrock Configuration
+            - name: BEDROCK_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_MODEL
+            - name: BEDROCK_SELECTION_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_SELECTION_MODEL
+            - name: BEDROCK_SELECTION_MODEL_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_SELECTION_MODEL_PROVIDER
+            - name: BEDROCK_SMALLTALK_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_SMALLTALK_MODEL
+            - name: BEDROCK_VERIFICATION_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_VERIFICATION_MODEL
+            - name: BEDROCK_EMBEDDING_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_EMBEDDING_MODEL
+            - name: BEDROCK_KNOWLEDGE_BASE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_KNOWLEDGE_BASE_ID
+            - name: BEDROCK_KB_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_KB_ID
+            - name: BEDROCK_DATA_SOURCE_TEST_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_DATA_SOURCE_TEST_ID
+            - name: BEDROCK_DATA_SOURCE_CHUNK_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_DATA_SOURCE_CHUNK_ID
+            - name: BEDROCK_DS_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_DS_ID
+            - name: BEDROCK_DS_ID_DOCS
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_DS_ID_DOCS
+            - name: BEDROCK_DS_ID_FAQ
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_DS_ID_FAQ
+            - name: BEDROCK_DS_ID_WEBSITE
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_DS_ID_WEBSITE
+            # LangSmith Configuration
+            - name: LANGSMITH_TRACING
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_TRACING
+            - name: LANGSMITH_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_ENDPOINT
+            - name: LANGSMITH_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_API_KEY
+            - name: LANGSMITH_PROJECT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_PROJECT
+            - name: LANGSMITH_SELECTION_PROMPT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_SELECTION_PROMPT
+            - name: LANGSMITH_RAG_PROMPT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_RAG_PROMPT
+            - name: LANGSMITH_SMALLTALK_PROMPT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_SMALLTALK_PROMPT
+            - name: LANGSMITH_CONVERSATION_PROMPT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_CONVERSATION_PROMPT
+            - name: LANGSMITH_VERIFICATION_PROMPT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_VERIFICATION_PROMPT
+            - name: LANGSMITH_MODERATION_PROMPT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_MODERATION_PROMPT
+            # Chat History Configuration
+            - name: CHAT_HISTORY_TTL_SECONDS
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: CHAT_HISTORY_TTL_SECONDS
+            - name: CHAT_HISTORY_MAX_TURNS
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: CHAT_HISTORY_MAX_TURNS
+            - name: CHAT_HISTORY_SUMMARY_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: CHAT_HISTORY_SUMMARY_MODEL
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+        - name: grpc-server
+          # AI-CHATBOT 이미지 (동일한 이미지 사용)
+          image: pbl07-02.kr-central-2.kcr.dev/vibot-ai-registry/vitamin7-ai-chatbot:21
+          imagePullPolicy: IfNotPresent
+          command: ["python", "app/grpc_server.py"]
+          ports:
+            - name: grpc
+              containerPort: 9090
+              protocol: TCP
+          env:
+            # Python 경로 설정 (protos 모듈을 찾기 위해)
+            - name: PYTHONPATH
+              value: "/app"
+            # FastAPI와 동일한 환경변수 사용
+            - name: APP_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: APP_NAME
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: APP_ENV
+            - name: GRPC_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: GRPC_PORT
+            # Redis Configuration
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: REDIS_URL
+            # PostgreSQL Configuration
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: DB_NAME
+            - name: POSTGRES_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: POSTGRES_SERVER
+            - name: POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: POSTGRES_PORT
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-chatbot-config
+                  key: POSTGRES_DB
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: DB_PASSWORD
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: POSTGRES_PASSWORD
+            # AWS Configuration
+            - name: AWS_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: AWS_REGION
+            - name: S3_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: S3_BUCKET
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: AWS_SECRET_ACCESS_KEY
+            # Bedrock Configuration
+            - name: BEDROCK_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_MODEL
+            - name: BEDROCK_SELECTION_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_SELECTION_MODEL
+            - name: BEDROCK_SELECTION_MODEL_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_SELECTION_MODEL_PROVIDER
+            - name: BEDROCK_SMALLTALK_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_SMALLTALK_MODEL
+            - name: BEDROCK_VERIFICATION_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_VERIFICATION_MODEL
+            - name: BEDROCK_EMBEDDING_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_EMBEDDING_MODEL
+            - name: BEDROCK_KNOWLEDGE_BASE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_KNOWLEDGE_BASE_ID
+            - name: BEDROCK_KB_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_KB_ID
+            - name: BEDROCK_DATA_SOURCE_TEST_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_DATA_SOURCE_TEST_ID
+            - name: BEDROCK_DATA_SOURCE_CHUNK_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_DATA_SOURCE_CHUNK_ID
+            - name: BEDROCK_DS_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_DS_ID
+            - name: BEDROCK_DS_ID_DOCS
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_DS_ID_DOCS
+            - name: BEDROCK_DS_ID_FAQ
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_DS_ID_FAQ
+            - name: BEDROCK_DS_ID_WEBSITE
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: BEDROCK_DS_ID_WEBSITE
+            # LangSmith Configuration
+            - name: LANGSMITH_TRACING
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_TRACING
+            - name: LANGSMITH_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_ENDPOINT
+            - name: LANGSMITH_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_API_KEY
+            - name: LANGSMITH_PROJECT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_PROJECT
+            - name: LANGSMITH_SELECTION_PROMPT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_SELECTION_PROMPT
+            - name: LANGSMITH_RAG_PROMPT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_RAG_PROMPT
+            - name: LANGSMITH_SMALLTALK_PROMPT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_SMALLTALK_PROMPT
+            - name: LANGSMITH_CONVERSATION_PROMPT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_CONVERSATION_PROMPT
+            - name: LANGSMITH_VERIFICATION_PROMPT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_VERIFICATION_PROMPT
+            - name: LANGSMITH_MODERATION_PROMPT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: LANGSMITH_MODERATION_PROMPT
+            # Chat History Configuration
+            - name: CHAT_HISTORY_TTL_SECONDS
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: CHAT_HISTORY_TTL_SECONDS
+            - name: CHAT_HISTORY_MAX_TURNS
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: CHAT_HISTORY_MAX_TURNS
+            - name: CHAT_HISTORY_SUMMARY_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-chatbot-secret
+                  key: CHAT_HISTORY_SUMMARY_MODEL
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+

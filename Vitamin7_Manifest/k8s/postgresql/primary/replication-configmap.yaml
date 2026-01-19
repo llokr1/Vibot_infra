@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-replication-config
+  namespace: postgresql-primary
+data:
+  # PostgreSQL Streaming Replication 설정
+  postgresql.conf: |
+    # WAL 설정 (Streaming Replication 필수)
+    wal_level = replica
+    max_wal_senders = 3
+    max_replication_slots = 3
+    wal_keep_size = 1024MB
+    
+    # Hot Standby 설정
+    hot_standby = on
+    hot_standby_feedback = on
+    
+    # Connection 설정
+    max_connections = 100
+    
+    # Logging
+    logging_collector = on
+    log_directory = 'log'
+    log_filename = 'postgresql-%Y-%m-%d.log'
+    log_connections = on
+    log_disconnections = on
+  
+  # pg_hba.conf 설정 (Replication 연결 허용)
+  # 정상 환경과 동일: scram-sha-256 사용 (PostgreSQL 16 기본)
+  pg_hba.conf: |
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    local   all             all                                     trust
+    host    all             all             127.0.0.1/32            trust
+    host    all             all             ::1/128                 trust
+    # Replication 연결 허용 (Backup DB에서 접근)
+    host    replication     replicator      0.0.0.0/0               md5
+    host    replication     postgres        0.0.0.0/0               md5
+    # 일반 연결 (정상 환경과 동일: scram-sha-256, md5 제거)
+    host    all             all             0.0.0.0/0               scram-sha-256
+
+

@@ -1,0 +1,15 @@
+# 카카오 클라우드: csi-cinder-sc-delete StorageClass 사용
+# GKE: standard StorageClass 사용
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jenkins-pv-claim
+  namespace: devops-tools
+spec:
+  storageClassName: csi-cinder-sc-delete  # 카카오 클라우드 StorageClass
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

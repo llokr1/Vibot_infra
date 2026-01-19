@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-chatbot-config
+  namespace: ai-chatbot
+data:
+  APP_NAME: "ai-chatbot"
+  APP_ENV: "production"
+  APP_PORT: "8000"
+  GRPC_PORT: "9090"
+  # Redis Configuration (vibot와 동일한 Redis 사용)
+  REDIS_URL: "redis://redis.vibot.svc.cluster.local:6379/0"
+  # PostgreSQL Configuration (vibot와 동일한 DB 사용)
+  DB_HOST: "postgresql-primary.postgresql-primary.svc.cluster.local"
+  DB_PORT: "5432"
+  DB_NAME: "vibot"
+  POSTGRES_SERVER: "postgresql-primary.postgresql-primary.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "vibot"
+

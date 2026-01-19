@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-config
+  namespace: postgresql-primary
+data:
+  # PostgreSQL 데이터베이스 이름
+  POSTGRES_DB: "vibot"
+  # PostgreSQL 포트
+  POSTGRES_PORT: "5432"
+

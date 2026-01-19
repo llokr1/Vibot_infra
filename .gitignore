@@ -1,0 +1,22 @@
+# Terraform
+/Vitamin7_Terraform/
+
+# Kubernetes secrets and kubeconfig
+/Vitamin7_Manifest/k8s/secrets/
+/Vitamin7_Manifest/k8s/**/kubeconfig*.yaml
+/Vitamin7_Manifest/k8s/**/kubeconfig*.yaml.bak
+
+# S3 backup scripts/configs (PostgreSQL)
+/Vitamin7_Manifest/k8s/postgresql/standby/s3-backup-cronjob.yaml
+/Vitamin7_Manifest/k8s/postgresql/standby/s3-upload-script-configmap.yaml
+/Vitamin7_Manifest/k8s/postgresql/standby/s3-upload-script.py
+/Vitamin7_Manifest/k8s/postgresql/standby/backup-cleanup-cronjob.yaml
+/Vitamin7_Manifest/k8s/postgresql/standby/backup-configmap.yaml
+/Vitamin7_Manifest/k8s/postgresql/standby/restore-job.yaml
+
+# Pgpool-II health check secrets
+/Vitamin7_Manifest/k8s/secrets/postgresql/pgpool-healthcheck-secret.yaml
+
+# Docs
+*.md
+/Vitamin7_Manifest/docs/

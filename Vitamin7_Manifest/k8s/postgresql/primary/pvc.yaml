@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-pvc
+  namespace: postgresql-primary
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  # 기존 PVC와 동일한 StorageClass 사용 (csi-cinder-sc-delete-zone-a)
+  # 주의: PVC spec은 immutable하므로 기존 PVC와 정확히 일치해야 함
+  # 기존 PVC: csi-cinder-sc-delete-zone-a, 20Gi
+  storageClassName: csi-cinder-sc-delete-zone-a
+  # AZ 설정: primary는 zone-a (kr-central-2-a)에 배포
+  # StorageClass에 allowedTopologies로 zone-a 지정됨 (storageclass-zone-a.yaml 참고)
+

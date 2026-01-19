@@ -1,0 +1,43 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jenkins
+  namespace: devops-tools
+  annotations:
+    # Jenkins crumb 오류 해결을 위한 프록시 헤더 설정
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    # Jenkins가 프록시 뒤에서 올바르게 동작하도록 설정
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    # Forwarded 헤더 사용 (X-Forwarded-For, X-Forwarded-Proto, X-Forwarded-Host 자동 설정)
+    nginx.ingress.kubernetes.io/use-forwarded-headers: "true"
+    # 경로 우선순위: /jenkins 경로가 / 경로보다 우선되도록 설정
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+spec:
+  # Nginx Ingress Controller 사용
+  ingressClassName: nginx
+  rules:
+    # IP로 직접 접속하는 경우
+    - http:
+        paths:
+          # 프로젝트 변경: 경로를 /jenkins로 설정 (vibot과 충돌 방지)
+          - path: /jenkins
+            pathType: Prefix
+            backend:
+              service:
+                name: jenkins-service
+                port:
+                  number: 8080
+    # 도메인으로 접속하는 경우 (api.vitamin7.org/jenkins)
+    - host: api.vitamin7.org
+      http:
+        paths:
+          # /jenkins 경로는 Jenkins로 라우팅 (vibot의 / 경로보다 우선)
+          - path: /jenkins
+            pathType: Prefix
+            backend:
+              service:
+                name: jenkins-service
+                port:
+                  number: 8080
+

@@ -1,0 +1,168 @@
+# Grafana Loki Helm Chart Values - SimpleScalable Mode with Kakao Cloud Object Storage
+# 사용법: helm upgrade --install loki grafana/loki --namespace monitoring --create-namespace -f values-loki.yaml
+
+# Deployment Mode (최상위 레벨)
+# SimpleScalable: Kakao Cloud Object Storage 사용 (S3 호환 API 사용)
+deploymentMode: SimpleScalable
+
+# Loki 공통 설정
+loki:
+  authEnabled: false
+  commonConfig:
+    replication_factor: 1
+  # Kakao Cloud Object Storage 설정
+  # 참고: Loki는 S3 호환 API를 사용하므로 type: s3로 설정하지만, 실제로는 Kakao Cloud Object Storage를 사용합니다
+  storage:
+    type: s3  # S3 호환 API 사용 (Kakao Cloud Object Storage는 S3 호환)
+    bucketNames:
+      chunks: vibot-bucket  # 로그 청크와 규칙을 하나의 버킷에 저장
+      ruler: vibot-bucket   # 동일한 버킷 사용 (내부적으로 prefix로 구분)
+    s3:
+      # Kakao Cloud Object Storage Endpoint
+      endpoint: objectstorage.kr-central-2.kakaoi.io
+      # Kakao Cloud 리전
+      region: kr-central-2
+      # Kakao Cloud Object Storage는 Path Style 사용 필수
+      s3ForcePathStyle: true
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: s3  # S3 호환 API (Kakao Cloud Object Storage)
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+  # 리소스 제한 (메모리 엄격 관리, CPU는 넉넉하게)
+  # Loki는 로그 인덱싱을 위해 메모리 필요
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 2000m      # CPU는 넉넉하게
+      memory: 512Mi   # Loki 안전 메모리 (인덱싱 고려)
+  # Kakao Cloud Object Storage 인증 정보 (Secret에서 가져옴)
+  # 참고: 환경 변수 이름은 AWS_*이지만, 실제로는 Kakao Cloud Object Storage Access Key를 사용합니다
+  extraEnv:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: loki-object-storage
+          key: AWS_ACCESS_KEY_ID  # Kakao Cloud Object Storage Access Key ID
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: loki-object-storage
+          key: AWS_SECRET_ACCESS_KEY  # Kakao Cloud Object Storage Secret Access Key
+
+# SimpleScalable 모드 설정
+# Object Storage 사용 시 PVC 불필요 (모든 컴포넌트의 persistence 비활성화)
+gateway:
+  persistence:
+    enabled: false
+  # 리소스 제한 (메모리 엄격 관리, CPU는 넉넉하게)
+  # Gateway는 nginx 기반이므로 메모리 사용량 적음
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 2000m      # CPU는 넉넉하게
+      memory: 128Mi   # Gateway 안전 메모리
+read:
+  replicas: 1
+  persistence:
+    enabled: false
+  # Kakao Cloud Object Storage 인증 정보 (Secret에서 가져옴)
+  extraEnv:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: loki-object-storage
+          key: AWS_ACCESS_KEY_ID
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: loki-object-storage
+          key: AWS_SECRET_ACCESS_KEY
+  # 리소스 제한 (메모리 엄격 관리, CPU는 넉넉하게)
+  # Loki read/write/backend는 로그 처리에 메모리 필요
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 2000m      # CPU는 넉넉하게
+      memory: 256Mi   # Loki 컴포넌트 안전 메모리
+write:
+  replicas: 1
+  persistence:
+    # volumeClaimsEnabled를 false로 설정하여 PVC 생성 방지
+    volumeClaimsEnabled: false
+    # emptyDir 사용 (PVC 대신)
+    dataVolumeParameters:
+      emptyDir: {}
+  # Kakao Cloud Object Storage 인증 정보 (Secret에서 가져옴)
+  extraEnv:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: loki-object-storage
+          key: AWS_ACCESS_KEY_ID
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: loki-object-storage
+          key: AWS_SECRET_ACCESS_KEY
+  # 리소스 제한 (메모리 엄격 관리, CPU는 넉넉하게)
+  # Loki read/write/backend는 로그 처리에 메모리 필요
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 2000m      # CPU는 넉넉하게
+      memory: 256Mi   # Loki 컴포넌트 안전 메모리
+backend:
+  replicas: 1
+  persistence:
+    # volumeClaimsEnabled를 false로 설정하여 PVC 생성 방지
+    volumeClaimsEnabled: false
+    # emptyDir 사용 (PVC 대신)
+    dataVolumeParameters:
+      emptyDir: {}
+  # Kakao Cloud Object Storage 인증 정보 (Secret에서 가져옴)
+  extraEnv:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: loki-object-storage
+          key: AWS_ACCESS_KEY_ID
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: loki-object-storage
+          key: AWS_SECRET_ACCESS_KEY
+  # 리소스 제한 (메모리 엄격 관리, CPU는 넉넉하게)
+  # Loki read/write/backend는 로그 처리에 메모리 필요
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 2000m      # CPU는 넉넉하게
+      memory: 256Mi   # Loki 컴포넌트 안전 메모리
+# Cache 컴포넌트 비활성화 (최소 구성 - 캐시 불필요)
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+
+# Ruler 비활성화 (알림 규칙 관리 미사용)
+ruler:
+  enabled: false
+
+# Grafana 비활성화 (기존 kube-prometheus-stack 사용)
+grafana:
+  enabled: false
